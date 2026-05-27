@@ -1,5 +1,3 @@
-# Another No One — Design Document
-
 ## 1. Visão Central
 
 **Another No One** é um jogo persistente de ação-tática sci-fi de mundo aberto 2D top-down com simulação emergente global, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
@@ -39,7 +37,6 @@ O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o 
 | Ano 7 | AES declara V1C5A302-H como "Zona de Conflito Ativo — Classe 4" |
 | Ano 8 | Você chega. Reforço. Descartável. |
 
----
 
 ## 3. A Corporação: Atlas Extraction & Security (AES)
 
@@ -74,7 +71,6 @@ A AES é uma **Sociedade Anônima Interplanetária**, não um governo. Compra di
 
 **Another No One.**
 
----
 
 ## 4. Os Inimigos: Mycelion
 
@@ -115,7 +111,6 @@ Os humanos ainda não provaram isso. A maioria dentro da AES rejeita a hipótese
 - **Inteligência**: coletiva e local. Sem líderes. Sem reis. Apenas funções.
 - **Evolução adaptativa**: aprendem com táticas humanas. Usam granadas? Dispersam. Usam fogo? Carapaças engrossam.
 
----
 
 ## 5. O Jogador
 
@@ -136,7 +131,6 @@ Os humanos ainda não provaram isso. A maioria dentro da AES rejeita a hipótese
 - Sem estímulos biológicos. Algumas ações são menos intuitivas.
 - Possibilidade de "despertar" — Chassis que desenvolvem comportamento anômalo
 
----
 
 ## 6. Perspectiva e Renderização
 
@@ -190,7 +184,6 @@ A arquitetura separa completamente **lógica de mundo** de **apresentação visu
 - Replays determinísticos — grave o stream de estado do servidor e reproduza em qualquer cliente
 - Modding visual — comunidade pode criar skins, texturas, e até engines de renderização alternativos sem tocar no servidor
 
----
 
 ## 7. Sistema de Ticks e Persistência
 
@@ -251,7 +244,6 @@ Como o mundo opera em ticks discretos e o estado é totalmente computado, todo o
 - O histórico completo do mundo pode ser "rebobinado" para qualquer ponto no tempo
 - Isso permite debug, investigação de bugs, e espectadores assistindo a eventos passados
 
----
 
 ## 8. Simulação de Mundo Vivo (Escala Global)
 
@@ -321,7 +313,6 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 - **Comunicação de longa distância**: rádio tem alcance limitado. Notícias de outras colônias chegam com delay, ou não chegam.
 - **Eventos globais**: uma praga em uma colônia pode se espalhar. Uma revolta em outra pode inspirar desertores na sua área.
 
----
 
 ## 9. Arquitetura de Servidor
 
@@ -450,7 +441,44 @@ Todos os servidores se comunicam via bus de eventos.
 ---
 
 
----
+
+## 10. Temas e Experiência
+
+### 10.1 O Jogo Pergunta
+
+- É possível deixar de ser "Another No One" em um sistema que te trata como recurso?
+- Se você é substituível, o que sobrevive de verdade?
+- Você pode ser lembrado por NPCs que não sabem que você já morreu uma vez?
+- Os Mycelion são o inimigo, ou são apenas fazendo o mesmo que a humanidade — colonizar?
+- O que significa "liberdade" em um mundo onde até a escolha de ser livre tem preço?
+- O mundo avançou sem você enquanto dormia. O que isso diz sobre a sua importância?
+
+### 10.2 Arco Emocional
+
+1. **Desembarque**: Você é um número em uma fila. Ninguém olha para você.
+2. **Terror**: Os Mycelion não são "monstros". São um sistema. E você está dentro dele.
+3. **Rotina**: A guerra normaliza. Você patrulha, extrai, repara, espera.
+4. **Conexão**: Alguns NPCs começam a reagir a você como indivíduo. Isso é reconfortante. Ou aterrorizante.
+5. **Comércio e Traição**: Você descobre que a colônia tem uma economia viva. E que a AES é apenas uma facção entre várias.
+6. **Ausência**: Você desconecta. Volta. O mundo mudou. Alguém morreu. Alguém desertou. Algo foi construído. Algo foi destruído.
+7. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente. Ou volta endividado.
+8. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído? Mudar o mundo?
+
+
+## 11. Referências Inspiracionais
+
+- Colonização sci-fi militar sombria
+- Simulação emergente profunda (mundos que vivem sem o jogador)
+- Economia viva, facções autônomas, escravidão e liberdade em sandbox
+- Arquitetura de servidor distribuído como metáfora narrativa
+- Biologia de superorganismos (formigas, fungos, corais)
+- Economia de guerra e corporações militares privadas
+- Questões de identidade em clones, backups, e máquinas conscientes
+- Separação de camada lógica e camada gráfica (arquitetura limpa)
+- Jogos persistentes com ticks onde o mundo avança independente do jogador
+
+
+
 
 ## 12. Camadas de Abstração e Níveis de Simulação
 
@@ -594,9 +622,7 @@ Mas o jogador também interage com abstrações:
 
 **Another No One.**
 
----
----
-
+---\n
 ## 13. Simulação Sob Demanda e Persistência Preguiçosa
 
 ### O Problema
@@ -751,42 +777,142 @@ Uma mina pode ter fechado porque a fórmula de produção calculou que os suprim
 
 **O mundo é um sistema de equações. O jogador é apenas uma variável que entra e sai.**
 
+---\n
+## 14. Sistema de Tempo, Automação e Limitação de Progressão
+
+### O Princípio
+
+Another No One é um jogo persistente que roda 24 horas por dia, mas **nenhum jogador pode progredir indefinidamente**. O mundo avança continuamente, mas a evolução de cada personagem é limitada a **8 horas de atividade efetiva por dia**.
+
+Isso não é uma restrição técnica. É uma **restrição de design** que equilibra jogadores que podem jogar o dia todo com jogadores que trabalham e só têm poucas horas livres.
+
+### As Duas Modalidades de Atividade
+
+| Modalidade | Descrição | Conta para o limite? |
+|------------|-----------|---------------------|
+| **Atividade Direta** | Jogador conectado, controlando o personagem em tempo real | Sim |
+| **Automação Offline** | Personagem executa lista de tarefas predefinida enquanto jogador está offline | Sim, até o limite diário |
+| **Suspensão Segura** | Personagem em ambiente protegido (quartel, domo, bunker) sem atividade | Não |
+
+### Suspensão Segura
+
+Quando um jogador desconecta-se, o personagem não desaparece do mundo. Ele permanece no mapa como uma entidade inerte — dormindo, em coma estase, ou simplesmente "offline" no lore.
+
+Para que o personagem esteja seguro durante a ausência, o jogador deve colocá-lo em um **ambiente de suspensão segura**:
+- Quartel da AES com guardas
+- Domo pressurizado funcional
+- Bunker ou abrigo fortificado
+- Veículo blindado estacionado
+
+Se o personagem for desconectado em campo aberto, ele permanece vulnerável. Mycelion podem encontrá-lo. Desertores podem roubá-lo. A tempestade pode matá-lo. Quando o jogador reconecta, pode encontrar um cadáver.
+
+**Na lore**: a AES não garante segurança fora de instalações autorizadas. Seu contrato diz: "A corporação não se responsabiliza por perda de ativos operacionais em campo não-seguro."
+
+### Lista de Tarefas (Automação Offline)
+
+O jogador pode deixar uma **lista de afazeres** para o personagem executar enquanto está offline. Isso é representado no jogo como "protocolos de automação" ou "rotinas de serviço" deixadas no sistema neural do Reprint ou no programa operacional do Chassi.
+
+**Como funciona**:
+1. Jogador conecta-se, joga normalmente
+2. Antes de desconectar, abre a interface de lista de tarefas
+3. Define até 10 ações sequenciais ou condicionais:
+   - "Patrulhar setor B por 2 horas"
+   - "Se encontrar Mycelion, retornar ao quartel"
+   - "Minerar cristais na Mina Alpha enquanto moral > 30%"
+   - "Reparar barricadas nas posições designadas"
+   - "Escoltar comboio de suprimentos até o Ponto de Pouso"
+4. O personagem executa essas tarefas via IA do Servidor NPCs, seguindo as mesmas regras de qualquer NPC
+5. O jogador reconecta e recebe um **relatório de atividade**: o que foi feito, o que falhou, o que foi ganho/perdido
+
+**Limitações da automação**:
+- O personagem em automação tem IA limitada. Não pode improvisar estratégias complexas, negociar, ou tomar decisões morais
+- Se uma tarefa falha (Mycelion atacam, caminho bloqueado, recurso acaba), o personagem tenta a próxima tarefa ou retorna ao ponto seguro
+- Automação em áreas hostis é perigosa. O personagem pode morrer enquanto o jogador dorme
+
+### O Limite Diário de 8 Horas
+
+Cada personagem tem um **cronômetro de atividade efetiva** que reseta a cada 24 horas (no fuso do servidor).
+
+| Atividade | Consome do limite? |
+|-----------|-------------------|
+| Jogar conectado (movimento, combate, comércio) | Sim, tempo real |
+| Automação offline (lista de tarefas em execução) | Sim, tempo real |
+| Suspensão segura (dormindo em quartel) | Não |
+| Morte e espera por reativação | Não |
+| Conectado mas parado em área segura (AFK) | Não, desde que sem atividade |
+
+Quando o cronômetro atinge 8 horas:
+- O personagem **pode continuar jogando** normalmente
+- Mas toda **progressão para de contar**: XP, créditos, reputação, habilidades, loot — nada avança
+- O personagem ainda pode morrer, perder equipamento, e sofrer consequências
+- O mundo continua evoluindo ao redor dele, mas ele não evolui com ele
+
+**Na lore**: a AES monitora "eficiência operacional". Após 8 horas de atividade contínua, o sistema neural do Reprint entra em "modo de manutenção" — ainda funcional, mas sem registro de desempenho. Para Chassis, é "sobrecarga térmica de processamento".
+
+### Distribuição de Horas: Gratuito vs. Pago
+
+O sistema diferencia jogadores gratuitos de jogadores pagos:
+
+#### Jogador Gratuito
+
+- Tem direito a **4 horas de automação offline por dia**
+- Para ganhar essas 4 horas de automação, deve primeiro jogar **4 horas conectadas**
+- A proporção é **1:1**: cada 10 minutos jogados = 10 minutos de automação offline
+- Total máximo de evolução por dia: **8 horas** (4h jogando + 4h automação)
+- Se não jogar nada, não ganha automação
+
+| Dia de exemplo | Jogou | Automação disponível | Total evolução |
+|----------------|-------|---------------------|----------------|
+| Segunda | 2h | 2h | 4h |
+| Terça | 4h | 4h | 8h |
+| Quarta | 0h | 0h | 0h |
+| Quinta | 6h | 4h (capado) | 8h |
+
+#### Jogador Pago (Assinatura ou Compra)
+
+- Pode **comprar até 8 horas de automação por dia**
+- Não precisa jogar para ter automação — as horas compradas estão disponíveis imediatamente
+- Pode usar até **8h de automação + 8h jogando = 16h de presença no mundo**, mas o limite de evolução continua sendo **8h**
+- Ou seja: pode deixar o personagem em automação por 8h enquanto trabalha, e jogar 8h à noite. Total 16h no mundo, mas só 8h contam para evolução
+
+| Plano | Automação diária | Custo (referencial) |
+|-------|-----------------|---------------------|
+| Gratuito | Até 4h (1:1 com horas jogadas) | R$ 0 |
+| Básico | +2h de automação comprada | R$ 9,90/mês |
+| Padrão | +4h de automação comprada | R$ 19,90/mês |
+| Completo | +8h de automação comprada | R$ 29,90/mês |
+
+**Importante**: mesmo pagando, **ninguém evolui mais de 8h por dia**. O pagante só tem mais flexibilidade de quando e como usa essas 8h.
+
+### Por que 8 horas?
+
+O número não é arbitrário. É uma **jornada operacional padrão** dentro da lore:
+
+> "O contrato AES estabelece uma jornada de eficiência neural de 8 horas por ciclo de 24 horas. Exceder esse limite causa degradação de desempenho, perda de memória de curto prazo, e risco de colapso neural. A corporação não autoriza — e não paga por — atividade além desse limite."
+
+Isso torna a limitação parte do mundo, não uma barreira externa imposta pelo jogo. Os personagens têm motivo in-universe para parar de evoluir.
+
+### Consequências de Design
+
+- **Fairness**: quem trabalha 10h por dia e só pode jogar 2h à noite pode deixar o personagem em automação durante o dia e jogar à noite, chegando aos 8h de evolução
+- **Estratégia**: jogadores precisam planejar suas listas de tarefas. Automação em mina segura é lucrativa. Automação em linha de frente é suicídio
+- **Economia**: horas de automação compradas são um recurso valioso. Jogadores podem vendê-las no mercado negro (sim, isso é possível no lore)
+- **Comunidade**: guildas e pelotões podem coordenar automações — um jogador deixa seu personagem patrulhando enquanto outro está online, garantindo cobertura 24h
+- **Consequência de morte**: se um personagem morre durante automação, o jogador perdeu horas de evolução sem estar presente para reagir. Isso torna a escolha de onde automatizar uma decisão tática real
+
+### Exemplo de Dia de um Jogador Trabalhador
+
+> **07:00** — Jogador conecta 15 minutos antes de sair para o trabalho. Coloca o personagem em automação: "Patrulhar corredor entre Mina Alpha e Quartel. Se atacado, retornar."
+> 
+> **07:15** — Jogador desconecta. Personagem patrulha via automação. Consome 7h45min do limite diário.
+> 
+> **19:00** — Jogador volta do trabalho. Reconecta. Relatório: patrulha completada com sucesso. 2 encontros com Falx evitados. 150 créditos ganhos. Moral -5%.
+> 
+> **19:00 - 23:00** — Jogador joga 4 horas conectadas. Missões de escolta, combate, e comércio no mercado negro.
+> 
+> **23:00** — Jogador coloca personagem em suspensão segura no quartel. Não consome mais do limite.
+> 
+> **Total do dia**: 7h45min automação + 4h jogando = 11h45min no mundo, mas só 8h contaram para evolução. O jogador trabalhou o dia todo, mas manteve o personagem competitivo.
+
 ---
-## 10. Temas e Experiência
-
-### 10.1 O Jogo Pergunta
-
-- É possível deixar de ser "Another No One" em um sistema que te trata como recurso?
-- Se você é substituível, o que sobrevive de verdade?
-- Você pode ser lembrado por NPCs que não sabem que você já morreu uma vez?
-- Os Mycelion são o inimigo, ou são apenas fazendo o mesmo que a humanidade — colonizar?
-- O que significa "liberdade" em um mundo onde até a escolha de ser livre tem preço?
-- O mundo avançou sem você enquanto dormia. O que isso diz sobre a sua importância?
-
-### 10.2 Arco Emocional
-
-1. **Desembarque**: Você é um número em uma fila. Ninguém olha para você.
-2. **Terror**: Os Mycelion não são "monstros". São um sistema. E você está dentro dele.
-3. **Rotina**: A guerra normaliza. Você patrulha, extrai, repara, espera.
-4. **Conexão**: Alguns NPCs começam a reagir a você como indivíduo. Isso é reconfortante. Ou aterrorizante.
-5. **Comércio e Traição**: Você descobre que a colônia tem uma economia viva. E que a AES é apenas uma facção entre várias.
-6. **Ausência**: Você desconecta. Volta. O mundo mudou. Alguém morreu. Alguém desertou. Algo foi construído. Algo foi destruído.
-7. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente. Ou volta endividado.
-8. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído? Mudar o mundo?
-
----
-
-## 11. Referências Inspiracionais
-
-- Colonização sci-fi militar sombria
-- Simulação emergente profunda (mundos que vivem sem o jogador)
-- Economia viva, facções autônomas, escravidão e liberdade em sandbox
-- Arquitetura de servidor distribuído como metáfora narrativa
-- Biologia de superorganismos (formigas, fungos, corais)
-- Economia de guerra e corporações militares privadas
-- Questões de identidade em clones, backups, e máquinas conscientes
-- Separação de camada lógica e camada gráfica (arquitetura limpa)
-- Jogos persistentes com ticks onde o mundo avança independente do jogador
-
-
 
