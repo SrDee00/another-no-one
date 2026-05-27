@@ -84,6 +84,58 @@ A diferença está em **como** essas 8 horas são consumidas:
 | **Gratuito** | Até 4h | Até 4h (desbloqueadas jogando) | **8h máximo** |
 | **Pago** | Até 8h | Até 8h (disponíveis imediatamente) | **8h máximo** |
 
+## Curva de Distribuição de XP
+
+A evolução não é linear. As primeiras horas rendem mais XP por minuto, reconhecendo que nem todo jogador pode dedicar 8 horas por dia. Jogadores casuais que só têm 1 ou 2 horas não são penalizados na progressão.
+
+| Período | Multiplicador de XP | Rendimento por hora (base 100) | Cumulativo em 8h |
+|---------|---------------------|-------------------------------|-----------------|
+| **1ª hora** | **300%** | 300 | 300 |
+| **2ª hora** | **200%** | 200 | 500 |
+| **3ª–4ª hora** | **100%** | 100 | 700 |
+| **5ª–8ª hora** | **25%** | 25 | 800 |
+
+### O que isso significa
+
+Um jogador que joga **apenas 1 hora por dia** recebe **300 XP** — equivalente a 3 horas de progressão linear.
+
+Um jogador que joga **2 horas por dia** recebe **500 XP** — metade do XP total de 8 horas, em apenas 25% do tempo.
+
+Um jogador que joga **4 horas por dia** recebe **700 XP** — 87,5% do XP total de 8 horas, em metade do tempo.
+
+Um jogador que joga **8 horas por dia** recebe **800 XP** — apenas 14% a mais que quem joga 4 horas, mas dedicou o dobro do tempo.
+
+### Exemplos Comparativos
+
+| Jogador | Tempo Diário | XP Ganho | % do Máximo | Eficiência |
+|---------|-------------|----------|-------------|------------|
+| Casual | 1h | 300 | 37,5% | 300%/h |
+| Moderado | 2h | 500 | 62,5% | 250%/h |
+| Regular | 4h | 700 | 87,5% | 175%/h |
+| Hardcore | 8h | 800 | 100% | 100%/h |
+
+### Impacto no Sistema de Automação
+
+A curva de XP se aplica independentemente de a hora ser **manual** ou **automática**:
+
+- As primeiras horas de automação (se desbloqueadas) também usam o multiplicador 300%, depois 200%, etc.
+- Isso significa que um jogador pago que deixa 1h de automação + joga 1h manual recebe 600 XP (300 + 300), não importa a ordem.
+- A contagem de "qual hora está" é global para o personagem no dia, não separada por modalidade.
+
+### Por que isso importa
+
+- **Jogadores casuais** (1-2h/dia) não ficam para trás. Eles avançam 62,5% do caminho de quem joga o dia todo, em apenas 25% do tempo.
+- **Jogadores trabalhadores** que só podem jogar de noite podem manter personagens competitivos sem grind.
+- **Jogadores hardcore** ainda são recompensados por dedicar mais tempo, mas com rendimento decrescente — evitando que monopolizem o servidor.
+- **A curva favorece consistência**: jogar 1h por dia durante uma semana rende mais XP que jogar 8h num único dia e não jogar o resto da semana.
+
+### Na Lore
+
+> "A AES monitora eficiência neural por ciclo. Os primeiros 60 minutos de atividade demonstram pico de performance cognitiva. Após 4 horas, degradação significativa é observada. Atividades além de 8 horas são consideradas operacionais, não produtivas — não registradas para avaliação de desempenho."
+
+O sistema de XP reflete a biologia: Reprints e Chassis são mais eficientes quando descansados. O rendimento cai porque a mente (ou o núcleo) está esgotada.
+
+---
 ### Jogador Gratuito
 
 - Pode jogar até **4 horas** manualmente conectado
@@ -189,4 +241,5 @@ A limitação não é uma barreira externa imposta pelo jogo. É uma cláusula c
 > **23:00** — Jogador coloca personagem em suspensão segura no quartel. Não consome mais do limite.
 > 
 > **Total do dia**: 7h45min automação + 4h jogando = 11h45min no mundo, mas só 8h contaram para evolução.
+
 
