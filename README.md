@@ -25,6 +25,7 @@ O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o 
 | 11 | [Sistema de Tempo](11-time-system.md) | Limite de 8h diárias, automação offline, suspensão segura, gratuito vs pago |
 | 12 | [Temas e Experiência](12-themes.md) | Perguntas filosóficas, arco emocional, consequência narrativa |
 | 13 | [Referências](13-references.md) | Inspirações, analogias, contexto de design |
+| 14 | [Sistemas de Gameplay](14-gameplay-systems.md) | Ferimentos, evolução por prática, peso, sono, fome, desmembramento |
 
 ## Convenções
 
@@ -35,3 +36,4 @@ O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o 
 ---
 
 *Última atualização: 2026-05-27*
+
