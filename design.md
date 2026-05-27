@@ -2,17 +2,20 @@
 
 ## 1. Visão Central
 
-**Another No One** é um jogo de ação-tática sci-fi de mundo aberto 2D top-down com simulação emergente global, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
+**Another No One** é um jogo persistente de ação-tática sci-fi de mundo aberto 2D top-down com simulação emergente global, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
+
+O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o estado do mundo é computado e avança. Jogadores conectam-se, agem dentro de um tick, desconectam-se, e o mundo continua sem eles. Quando retornam, o mundo pode estar irreconhecível.
 
 > *"You are not the chosen one. You are not even someone. But you can become anything — or cease to exist."*
 
 ### Pilares de Design
 
-1. **Mundo Autônomo Global**: O planeta simula em tempo real independente do jogador. Economia, facções, comércio, escravidão, guerras — tudo evolui sozinho.
+1. **Mundo Persistente e Autônomo**: O planeta avança em ticks independente de jogadores. Economia, facções, comércio, escravidão, guerras — tudo evolui sozinho, 24 horas por dia.
 2. **Substituibilidade**: Cada morte consome recursos. Morrer demais = fim da existência.
 3. **Arquitetura em Camadas**: O jogo roda em servidores especializados que não se conhecem.
 4. **Camada Gráfica Indiferente**: O servidor de mundo não sabe que existe gráfico. O render é apenas um cliente que consome estado. O visual pode ser totalmente alterado sem tocar na lógica.
-5. **Ausência de Narrativa Linear**: Não existe "história principal". Existe apenas a guerra, a extração, e a sobrevivência.
+5. **Ticks Múltiplos**: Diferentes sistemas operam em frequências diferentes. Física a cada 10 segundos. Economia a cada 5 minutos. Eventos globais a cada 15 minutos. Ecologia a cada hora.
+6. **Ausência de Narrativa Linear**: Não existe "história principal". Existe apenas a guerra, a extração, e a sobrevivência.
 
 ---
 
@@ -203,11 +206,72 @@ A arquitetura separa completamente **lógica de mundo** de **apresentação visu
 
 ---
 
-## 7. Simulação de Mundo Vivo (Escala Global)
+## 7. Sistema de Ticks e Persistência
+
+### O mundo não espera
+
+Another No One não é um jogo que roda apenas quando há jogadores conectados. É um **servidor persistente** que opera continuamente. Jogadores entram, agem dentro de um ciclo de tick, desconectam-se, e o mundo continua. Quando retornam — uma hora depois, um dia depois, uma semana depois — podem encontrar uma colônia destruída, uma guerra encerrada, ou um deserto onde antes havia amigos.
+
+### Tick Mestre (Master Tick Orchestrator)
+
+Um orquestrador central mantém o tempo do mundo. Ele não simula nada. Apenas dispara eventos de tick para os servidores especializados em frequências predefinidas.
+
+| Tick | Frequência | O que processa |
+|------|-----------|--------------|
+| **Tick de Mecânicas** | 10 segundos | Movimento, combate, colisões, balística, construção/destruição, morte, ferimentos, interação direta |
+| **Tick de NPC Rotina** | 10 segundos (sincronizado) | Decisões de IA, mudança de estado emocional, reação a eventos, início/fim de patrulhas, percepção |
+| **Tick de Hive** | 10 segundos (sincronizado) | Movimento de castas Mycelion, liberação de feromônios, coordenação de swarms, evolução tática |
+| **Tick de Economia Local** | 5 minutos | Transações em uma colônia, preços, produção de minas, consumo de suprimentos, salários, dívida |
+| **Tick de Economia Global** | 30 minutos | Rotas interestelares, chegada de naves, balanço corporativo da AES, inflação entre colônias, mercado negro |
+| **Tick de Eventos Emergentes** | 15 minutos (ou disparado) | Greves, revoltas, descobertas, colapsos, traições, deserções em massa, epidemias |
+| **Tick de Ecologia** | 1 hora | Crescimento de flora, migração de fauna, ciclos climáticos, propagação de recursos naturais, evolução de castas |
+| **Tick de Persistência** | 10 minutos | Save completo do estado do mundo no banco de dados |
+
+### O Ciclo de Tick de 10 Segundos
+
+A cada 10 segundos reais, o mundo computa uma "rodada" completa:
+
+1. **Fase de Intenção**: Todos os clientes conectados enviam comandos para o Gateway (mover, atirar, falar, construir, comerciar, usar item). NPCs e Mycelion geram suas próprias intenções via IA.
+2. **Fase de Resolução de Física**: O Servidor Mundo processa todas as intenções simultaneamente:
+   - Resolve colisões e movimentos finais
+   - Calcula balística (projéteis em trajetória)
+   - Aplica dano de impacto, explosão, fogo
+   - Processa destruição de terreno e construção
+   - Determina posições finais de todas as entidades
+3. **Fase de Reação**: NPCs e Mycelion reagem ao novo estado:
+   - NPCs avaliam: amigo morreu? Inimigo visível? Recurso acabou?
+   - Mycelion processam feromônios liberados e ajustam comportamento de castas
+4. **Fase de Notificação**: O novo estado é broadcast para todos os clientes conectados. O cliente renderiza transições (animações, efeitos, sons). Jogadores offline não recebem — eles descobrirão quando reconectarem.
+
+**O jogador vê o resultado. Não participa da resolução.** Isso é como um jogo de estratégia simultâneo — todos agem, o mundo resolve, todos veem.
+
+### Ticks Assíncronos vs. Síncronos
+
+- **Ticks síncronos** (10s): Mecânicas, NPC, Hive — devem rodar **em sequência**, um após o outro, porque a resolução de um afeta o outro (física gera corpos mortos, NPCs reagem a corpos, Hive reage a disparos)
+- **Ticks assíncronos** (5min, 15min, 30min, 1h): Economia, eventos, ecologia — podem rodar em paralelo, pois operam em abstrações mais altas e não dependem de posições exatas no mapa
+
+### Persistência e Reconexão
+
+- O mundo salva estado completo a cada 10 minutos
+- Jogadores desconectados mantêm suas entidades no mundo como NPCs inertes (dormindo, em coma, ou simplesmente "offline" no lore)
+- Quando reconectam, recebem um **resumo de eventos** ocorridos em sua ausência (gerado automaticamente a partir do log de ticks)
+- Se o personagem morreu enquanto offline, o jogador descobre isso ao tentar reconectar. O jogo oferece reativação (se Reprint e houver créditos) ou fim de personagem
+- Se a colônia foi destruída, o jogador reconecta em um campo de ruínas
+
+### Determinismo e Replay
+
+Como o mundo opera em ticks discretos e o estado é totalmente computado, todo o histórico é deterministicamente replayável:
+- Cada tick gera um hash de estado
+- O histórico completo do mundo pode ser "rebobinado" para qualquer ponto no tempo
+- Isso permite debug, investigação de bugs, e espectadores assistindo a eventos passados
+
+---
+
+## 8. Simulação de Mundo Vivo (Escala Global)
 
 O servidor de simulação não é um jogo de "missões e spawns". É um **mundo autônomo** onde entidades têm vidas, necessidades, objetivos, e conflitos.
 
-### 7.1 Economia Viva
+### 8.1 Economia Viva
 
 A economia de V1C5A302-H não é uma loja com preços fixos. É um sistema dinâmico:
 
@@ -219,7 +283,7 @@ A economia de V1C5A302-H não é uma loja com preços fixos. É um sistema dinâ
 | **Inflação e Colapso** | Se a produção de cristais para, a AES corta reforços. Sem reforços, a Security perde território. Sem território, as minas fecham. Espiral de morte. |
 | **Créditos e Dívida** | Reprints ganham créditos por missões, mas pagam pela própria reativação. Alguns terminam como escravos de dívida da AES. |
 
-### 7.2 Facções Autônomas
+### 8.2 Facções Autônomas
 
 Múltiplas facções operam no planeta simultaneamente, com objetivos próprios:
 
@@ -235,7 +299,7 @@ Múltiplas facções operam no planeta simultaneamente, com objetivos próprios:
 
 Facções **entram em guerra entre si** sem avisar o jogador. Uma greve na mina Alpha pode paralisar a produção. Os contrabandistas podem armar os desertores. A AES pode bombardear uma vila suspeita. O jogador descobre isso ao vivo, no campo, ou pelo rádio.
 
-### 7.3 Sistema de Escravidão e Servidão
+### 8.3 Sistema de Escravidão e Servidão
 
 A AES não usa o termo "escravidão". Usa "contratos de indentura", "dívida operacional", e "reação de serviço compulsório".
 
@@ -249,7 +313,7 @@ O jogador pode:
 - **Ignorar** (a maioria faz isso)
 - **Ser capturado** (Reprints endividados podem ser "reclassificados" em campo)
 
-### 7.4 Rotinas e Vidas dos NPCs
+### 8.4 Rotinas e Vidas dos NPCs
 
 Cada NPC humano no planeta tem uma vida completa:
 
@@ -260,9 +324,9 @@ Cada NPC humano no planeta tem uma vida completa:
 - **Memória**: lembra de quem o ajudou, quem o roubou, quem morreu ao lado dele
 - **Morte**: quando um NPC morre, ele é removido do mundo. Outro pode ser enviado como substituto — ou não.
 
-NPCs agem mesmo quando o jogador está do outro lado do planeta. Um minerador pode decidir desertar à noite. Um soldado pode assassinar um oficial por vingança. Um contrabandista pode negociar com desertores. Tudo isso acontece em tempo real.
+NPCs agem mesmo quando o jogador está do outro lado do planeta. Um minerador pode decidir desertar à noite. Um soldado pode assassinar um oficial por vingança. Um contrabandista pode negociar com desertores. Tudo isso acontece em ticks, continuamente.
 
-### 7.5 Escala Global
+### 8.5 Escala Global
 
 O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 
@@ -273,23 +337,28 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 
 ---
 
-## 8. Arquitetura de Servidor
+## 9. Arquitetura de Servidor
 
-### 8.1 Visão Geral
+### 9.1 Visão Geral
 
 ```
 ┌──────────────────────────────────────────────┐
-│              CLIENTE (Render Layer)           │
+│           CLIENTE (Render Layer)              │
 │        2D Top-Down / Input / UI / Áudio      │
 │   Recebe ESTADO do mundo → desenha PIXELS    │
+│   Envia INTENÇÕES → Gateway                  │
 └──────────────────────┬───────────────────────┘
                        │  Protocolo de Estado
                        │  (Posições, Eventos,
                        │   Snapshot parcial)
+                       │
+                       │  Protocolo de Intenção
+                       │  (Mover, Atirar, Usar)
 ┌──────────────────────▼───────────────────────┐
 │           GATEWAY / ORQUESTRADOR            │
 │   (roteamento, autenticação, matchmaking,   │
-│    broadcast de estado, delta compression)   │
+│    broadcast de estado, delta compression,    │
+│    acumulo de intenções por tick)            │
 └──────────────────────┬───────────────────────┘
                        │
         ┌──────────────┼──────────────┐
@@ -306,14 +375,29 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
         └─────────────┴─────────────┘
                       │
          ┌────────────▼────────────┐
-         │      BANCO DE DADOS      │
-         │   (Estado Persistente,    │
-         │    Histórico, Logs,      │
-         │    Economia, Memórias)   │
-         └───────────────────────────┘
+│      BANCO DE DADOS              │
+│   (Estado Persistente,           │
+│    Histórico de Ticks, Logs,    │
+│    Economia, Memórias)          │
+└───────────────────────────────────┘
+        │
+┌───────▼────────┐
+│ TICK MESTRE    │
+│ (Orquestrador  │
+│  de frequências)│
+└────────────────┘
 ```
 
-### 8.2 Servidor Mundo (World Server)
+### 9.2 Tick Mestre (Master Tick Orchestrator)
+
+O Tick Mestre é o coração do sistema. Ele não simula nada — apenas coordena:
+- Mantém um clock global (`world_tick_counter`)
+- Emite eventos `TICK_MECHANICS`, `TICK_ECONOMY_LOCAL`, `TICK_ECONOMY_GLOBAL`, `TICK_EVENTS`, `TICK_ECOLOGY`, `TICK_PERSISTENCE` nas frequências corretas
+- Garante que ticks síncronos (Mecânicas → NPC → Hive) rodem em ordem
+- Permite que ticks assíncronos (Economia, Eventos, Ecologia) rodem em paralelo
+- Registra cada tick no banco de dados para determinismo e replay
+
+### 9.3 Servidor Mundo (World Server)
 
 **Função**: Simula o planeta como sistema físico. Não conhece "jogador", "NPC" ou "inimigo". Conhece apenas entidades.
 
@@ -328,7 +412,7 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 
 **Comunicação com Cliente**: O World Server emite snapshots de estado (entidades + terreno dentro do raio de simulação ativa) e eventos pontuais (explosão, tiro, morte). O cliente renderiza isso. O World Server **nunca recebe comandos de renderização**.
 
-### 8.3 Servidor NPCs (Human Server)
+### 9.4 Servidor NPCs (Human Server)
 
 **Função**: Simula toda a humanidade no planeta como agentes inteligentes.
 
@@ -345,7 +429,7 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 
 **IA**: HTN (Hierarchical Task Networks) + GOAP (Goal-Oriented Action Planning) + sistemas emocionais (medo, fadiga, lealdade, desespero, ambição). Cada NPC tem memória de curto prazo (últimas 24h) e longo prazo (eventos marcantes, relacionamentos, traumas).
 
-### 8.4 Servidor Inimigos (Hive Server)
+### 9.5 Servidor Inimigos (Hive Server)
 
 **Função**: Simula os Mycelion como superorganismo.
 
@@ -358,7 +442,7 @@ O planeta inteiro é simulado, não apenas a área ao redor do jogador:
 
 **Filosofia**: *Não há comando central. Há apenas o jardim, e a resposta imunológica.*
 
-### 8.5 Protocolo de Comunicação
+### 9.6 Protocolo de Comunicação
 
 Todos os servidores se comunicam via bus de eventos.
 
@@ -366,42 +450,44 @@ Todos os servidores se comunicam via bus de eventos.
 ```json
 {
   "tick": 1847293,
-  "origin": "world|npc|hive",
+  "origin": "world|npc|hive|player",
   "entity_id": "uuid",
-  "type": "move|fire|dig|damage|spawn|die|modify_terrain|emit_pheromone|trade|speak|order",
+  "type": "move|fire|dig|damage|spawn|die|modify_terrain|emit_pheromone|trade|speak|order|intent",
   "payload": { ... }
 }
 ```
 
 **Princípio**: O Servidor Mundo **não lê o campo `origin`**. Um jogador que atira é indistinguível de um NPC ou de um Mycelion. A física é igual para todos.
 
-**Cliente → Gateway → Mundo**: O cliente envia apenas intenções de controle ("mover para direção X", "atirar em direção Y", "interagir com objeto Z"). O servidor de mundo decide se a ação é válida e aplica física. O cliente **nunca** decide posição final, dano, ou resultado.
+**Cliente → Gateway → Mundo**: O cliente envia apenas **intenções de controle** ("mover para direção X", "atirar em direção Y", "interagir com objeto Z"). O servidor de mundo decide se a ação é válida e aplica física no próximo tick. O cliente **nunca** decide posição final, dano, ou resultado.
 
 ---
 
-## 9. Temas e Experiência
+## 10. Temas e Experiência
 
-### 9.1 O Jogo Pergunta
+### 10.1 O Jogo Pergunta
 
 - É possível deixar de ser "Another No One" em um sistema que te trata como recurso?
 - Se você é substituível, o que sobrevive de verdade?
 - Você pode ser lembrado por NPCs que não sabem que você já morreu uma vez?
 - Os Mycelion são o inimigo, ou são apenas fazendo o mesmo que a humanidade — colonizar?
 - O que significa "liberdade" em um mundo onde até a escolha de ser livre tem preço?
+- O mundo avançou sem você enquanto dormia. O que isso diz sobre a sua importância?
 
-### 9.2 Arco Emocional
+### 10.2 Arco Emocional
 
 1. **Desembarque**: Você é um número em uma fila. Ninguém olha para você.
 2. **Terror**: Os Mycelion não são "monstros". São um sistema. E você está dentro dele.
 3. **Rotina**: A guerra normaliza. Você patrulha, extrai, repara, espera.
 4. **Conexão**: Alguns NPCs começam a reagir a você como indivíduo. Isso é reconfortante. Ou aterrorizante.
 5. **Comércio e Traição**: Você descobre que a colônia tem uma economia viva. E que a AES é apenas uma facção entre várias.
-6. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente. Ou volta endividado.
-7. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído? Mudar o mundo?
+6. **Ausência**: Você desconecta. Volta. O mundo mudou. Alguém morreu. Alguém desertou. Algo foi construído. Algo foi destruído.
+7. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente. Ou volta endividado.
+8. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído? Mudar o mundo?
 
 ---
 
-## 10. Referências Inspiracionais
+## 11. Referências Inspiracionais
 
 - Colonização sci-fi militar sombria
 - Simulação emergente profunda (mundos que vivem sem o jogador)
@@ -411,3 +497,4 @@ Todos os servidores se comunicam via bus de eventos.
 - Economia de guerra e corporações militares privadas
 - Questões de identidade em clones, backups, e máquinas conscientes
 - Separação de camada lógica e camada gráfica (arquitetura limpa)
+- Jogos persistentes com ticks onde o mundo avança independente do jogador
