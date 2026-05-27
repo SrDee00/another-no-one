@@ -2,16 +2,17 @@
 
 ## 1. Visão Central
 
-**Another No One** é um jogo de ação-tática sci-fi de mundo aberto com simulação emergente, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
+**Another No One** é um jogo de ação-tática sci-fi de mundo aberto 2D top-down com simulação emergente global, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
 
 > *"You are not the chosen one. You are not even someone. But you can become anything — or cease to exist."*
 
 ### Pilares de Design
 
-1. **Mundo Autônomo**: O planeta simula em tempo real independente do jogador. O mundo não diferencia jogadores, NPCs ou inimigos.
+1. **Mundo Autônomo Global**: O planeta simula em tempo real independente do jogador. Economia, facções, comércio, escravidão, guerras — tudo evolui sozinho.
 2. **Substituibilidade**: Cada morte consome recursos. Morrer demais = fim da existência.
-3. **Arquitetura em Camadas**: O jogo roda em servidores especializados que não se conhecem — assim como ninguém no jogo conhece o jogador.
-4. **Ausência de Narrativa Linear**: Não existe "história principal". Existe apenas a guerra, a extração, e a sobrevivência.
+3. **Arquitetura em Camadas**: O jogo roda em servidores especializados que não se conhecem.
+4. **Camada Gráfica Indiferente**: O servidor de mundo não sabe que existe gráfico. O render é apenas um cliente que consome estado. O visual pode ser totalmente alterado sem tocar na lógica.
+5. **Ausência de Narrativa Linear**: Não existe "história principal". Existe apenas a guerra, a extração, e a sobrevivência.
 
 ---
 
@@ -96,7 +97,7 @@ Xenobiólogos da AES encontraram organismos semelhantes em outros planetas: semp
 
 A hipótese *Mycelion* propõe uma **rede biológica dispersora** que viaja entre mundos. Uma matriz que infecta biologias locais, as reorganiza em colônias funcionais, e as usa para transformar o planeta. Cada planeta produz "cogumelos diferentes", mas todos são alimentados pelo mesmo micélio.
 
-Os humanos ainda não provaram isso. A maioria dentro da AES rejeita a hipótese como "alarmismo científico". Mas os que trabalham no chão sentem que algo não se encaixa. Os Nativos são muito organizados para serem "apenas fauna".
+Os humanos ainda não provaram isso. A maioria dentro da AES rejeita a hipótese como "alarmismo científico".
 
 ### Designações
 
@@ -148,120 +149,265 @@ Os humanos ainda não provaram isso. A maioria dentro da AES rejeita a hipótese
 
 ---
 
-## 6. Arquitetura de Servidor
+## 6. Perspectiva e Renderização
 
-### Visão Geral
+### 2D Top-Down
+
+O jogo é apresentado em **perspectiva top-down 2D**. Visão isométrica ou ortogonal pura. O jogador vê o mundo de cima, como um mapa operacional tático, mas com profundidade suficiente para ler terreno, cobertura, e movimento de tropas.
+
+Isso permite:
+- Leitura clara de formações de batalha e movimento de swarms
+- Interface limpa para gestão de recursos e informação tática
+- Escalabilidade visual — o mesmo engine pode renderizar 1 soldado ou 500
+- Baixo custo de produção de assets, permitindo foco em simulação
+
+### Camada Gráfica Indiferente (Render Layer)
+
+A arquitetura separa completamente **lógica de mundo** de **apresentação visual**:
 
 ```
-┌──────────────────────────────────────────┐
-│              CLIENTE (Jogador)          │
-│          Render, Input, Predição Local    │
-└───────────────────┬──────────────────────┘
-                    │
-┌───────────────────▼──────────────────────┐
-│          GATEWAY / ORQUESTRADOR          │
-│   (roteamento, autenticação, eventos)    │
-└───────────────────┬──────────────────────┘
-                    │
-        ┌───────────┼───────────┐
-        │           │           │
-┌───────▼─────┐ ┌───▼─────┐ ┌───▼─────┐
-│  SERVIDOR   │ │SERVIDOR │ │ SERVIDOR│
-│    MUNDO    │ │  NPCs   │ │INIMIGOS │
-│ (Física,    │ │(Humanos,│ │(Nativos,│
-│  Mapa,      │ │ Colonos,│ │ Castas, │
-│  Entidades) │ │  AES)   │ │ Colmeia)│
-└───────┬─────┘ └────┬────┘ └────┬────┘
-        │            │           │
-        └────────────┴───────────┘
-                     │
-         ┌───────────▼───────────┐
-         │   BANCO DE DADOS      │
-         │  (Estado Persistente)  │
-         └────────────────────────┘
+┌──────────────────────────────────────────────┐
+│           CLIENTE (Render Layer)              │
+│  2D Top-Down / Futuro: 3D, Isométrico, etc  │
+│  Recebe ESTADO → Renderiza PIXELS            │
+│  Não decide. Não simula. Apenas exibe.       │
+└───────────────────┬──────────────────────────┘
+                    │  Protocolo de Estado
+                    │  (JSON binário / protobuf)
+┌───────────────────▼──────────────────────────┐
+│           SERVIDOR MUNDO (World Server)        │
+│  Simula física, entidades, colisões, terreno   │
+│  Não sabe que existe gráfico. Não se importa. │
+└────────────────────────────────────────────────┘
 ```
 
-### Servidor Mundo (World Server)
+**O Servidor Mundo nunca sabe como ele está sendo visto.** Ele apenas emite:
+- Posições de entidades (x, y, z, ângulo, velocidade)
+- Estados de terreno (modificado, destruído, construído)
+- Eventos de física (explosão em X,Y, dano em entidade #UUID)
+- Estados de entidades (vivo, morto, ferido, operando máquina)
+
+**O Cliente Render decide:**
+- Qual sprite/textura usar para cada entidade
+- Como animar uma transição de movimento
+- Quais efeitos visuais aplicar sobre um evento
+- Zoom, câmera, filtros de UI, minimapa
+
+**Isso é perfeitamente possível** e é exatamente como muitos jogos modernos de escala operam. O servidor simula. O cliente desenha. Se amanhã você quiser mudar de 2D top-down para 3D isométrico ou até first-person, o servidor de mundo permanece **intacto**. Apenas o cliente render muda.
+
+**Benefícios práticos:**
+- Múltiplos clientes visuais podem coexistir (modo tático top-down para PC, interface minimapa para mobile, visualização 3D para espectadores)
+- Testes de servidor sem gráfico — você pode rodar o mundo em um terminal sem GPU
+- Replays determinísticos — grave o stream de estado do servidor e reproduza em qualquer cliente
+- Modding visual — comunidade pode criar skins, texturas, e até engines de renderização alternativos sem tocar no servidor
+
+---
+
+## 7. Simulação de Mundo Vivo (Escala Global)
+
+O servidor de simulação não é um jogo de "missões e spawns". É um **mundo autônomo** onde entidades têm vidas, necessidades, objetivos, e conflitos.
+
+### 7.1 Economia Viva
+
+A economia de V1C5A302-H não é uma loja com preços fixos. É um sistema dinâmico:
+
+| Componente | Funcionamento |
+|------------|---------------|
+| **Oferta e Demanda** | Cristais de fase extraídos aumentam oferta; rotas interrompidas por Mycelion reduzem oferta. Preços flutuam em tempo real. |
+| **Escassez de Suprimentos** | Comida, munição, medicamentos, combustível vêm de fora do planeta. Naves de suprimento têm calendários. Se uma nave é destruída, a colônia sente em semanas. |
+| **Comércio Interno** | Soldados compram de contrabandistas. Mineradores vendem minerais extras no mercado negro. Administradores desviam recursos. |
+| **Inflação e Colapso** | Se a produção de cristais para, a AES corta reforços. Sem reforços, a Security perde território. Sem território, as minas fecham. Espiral de morte. |
+| **Créditos e Dívida** | Reprints ganham créditos por missões, mas pagam pela própria reativação. Alguns terminam como escravos de dívida da AES. |
+
+### 7.2 Facções Autônomas
+
+Múltiplas facções operam no planeta simultaneamente, com objetivos próprios:
+
+| Facção | Objetivo | Relação com Jogador |
+|--------|----------|---------------------|
+| **AES Security** | Manter extração e defender instalações | Empregador. Te paga. Te descarta. |
+| **AES Extração** | Maximizar produção de cristais | Te usa como escolta. Sem escolta, minas morrem. |
+| **Sindicato dos Trabalhadores** | Condições melhores, menos mortes | Pode te recrutar para sabotagem ou proteção de greves |
+| **Contrabandistas do Vazio** | Lucro no mercado negro | Vendem equipamento proibido. Confiáveis até o preço subir. |
+| **Desertores/Fora-da-Lei** | Sobreviver longe da AES | Hostis ou neutros. Alguns formam vilas independentes. |
+| **Cientistas Renegados** | Estudar Mycelion a qualquer custo | Podem te usar como isca. Ou te salvar se você trouxer amostras. |
+| **Mycelion** | Expandir, consumir, transformar | Inimigo. Mas também só está fazendo o que biologia manda. |
+
+Facções **entram em guerra entre si** sem avisar o jogador. Uma greve na mina Alpha pode paralisar a produção. Os contrabandistas podem armar os desertores. A AES pode bombardear uma vila suspeita. O jogador descobre isso ao vivo, no campo, ou pelo rádio.
+
+### 7.3 Sistema de Escravidão e Servidão
+
+A AES não usa o termo "escravidão". Usa "contratos de indentura", "dívida operacional", e "reação de serviço compulsório".
+
+- **Reprints endividados**: soldados que morreram demais e não conseguem pagar a reativação são colocados em "programas de recuperação de custo" — trabalho forçado em minas perigosas até a dívida zerar (nunca zera).
+- **Prisioneiros de guerra**: capturados por Mycelion? Não existem prisioneiros. Os Mycelion não capturam. Mas desertores capturados pela AES são "reclassificados" como mão de obra penal.
+- **Chassis reaproveitados**: androides danificados que a AES decide não reparar são vendidos para contrabandistas, que os recondicionam e revendem.
+
+O jogador pode:
+- **Liberar escravos** (tornando-se inimigo da AES)
+- **Comprar escravos** (tornando-se parte do sistema)
+- **Ignorar** (a maioria faz isso)
+- **Ser capturado** (Reprints endividados podem ser "reclassificados" em campo)
+
+### 7.4 Rotinas e Vidas dos NPCs
+
+Cada NPC humano no planeta tem uma vida completa:
+
+- **Horário**: dorme, acorda, trabalha, come, socializa, patrulha, descansa
+- **Necessidades**: fome, sede, sono, moral, medo, saúde, sanidade
+- **Relacionamentos**: ama, odeia, confia, trai, protege, vinga
+- **Ambição**: quer subir de cargo, acumular créditos, desertar, ou apenas sobreviver até a próxima nave de suprimentos
+- **Memória**: lembra de quem o ajudou, quem o roubou, quem morreu ao lado dele
+- **Morte**: quando um NPC morre, ele é removido do mundo. Outro pode ser enviado como substituto — ou não.
+
+NPCs agem mesmo quando o jogador está do outro lado do planeta. Um minerador pode decidir desertar à noite. Um soldado pode assassinar um oficial por vingança. Um contrabandista pode negociar com desertores. Tudo isso acontece em tempo real.
+
+### 7.5 Escala Global
+
+O planeta inteiro é simulado, não apenas a área ao redor do jogador:
+
+- **Múltiplas colônias**: FNA-01 é a maior, mas existem outras instalações menores, algumas já abandonadas, outras sitiadas
+- **Rotas de suprimento**: naves aterrissam em intervalos regulares em zonas de pouso. Se a zona é tomada por Mycelion, nenhuma nave pousa.
+- **Comunicação de longa distância**: rádio tem alcance limitado. Notícias de outras colônias chegam com delay, ou não chegam.
+- **Eventos globais**: uma praga em uma colônia pode se espalhar. Uma revolta em outra pode inspirar desertores na sua área.
+
+---
+
+## 8. Arquitetura de Servidor
+
+### 8.1 Visão Geral
+
+```
+┌──────────────────────────────────────────────┐
+│              CLIENTE (Render Layer)           │
+│        2D Top-Down / Input / UI / Áudio      │
+│   Recebe ESTADO do mundo → desenha PIXELS    │
+└──────────────────────┬───────────────────────┘
+                       │  Protocolo de Estado
+                       │  (Posições, Eventos,
+                       │   Snapshot parcial)
+┌──────────────────────▼───────────────────────┐
+│           GATEWAY / ORQUESTRADOR            │
+│   (roteamento, autenticação, matchmaking,   │
+│    broadcast de estado, delta compression)   │
+└──────────────────────┬───────────────────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+┌───────▼──────┐ ┌────▼─────┐ ┌─────▼─────┐
+│   SERVIDOR   │ │ SERVIDOR │ │  SERVIDOR │
+│    MUNDO     │ │   NPCs   │ │ INIMIGOS  │
+│  (Física,    │ │ (Humanos,│ │ (Mycelion,│
+│   Mapa,      │ │ Colonos, │ │  Castas,  │
+│  Entidades,  │ │  AES,    │ │  Colmeia) │
+│  Clima)      │ │ Civis)   │ │            │
+└───────┬──────┘ └────┬─────┘ └─────┬─────┘
+        │             │             │
+        └─────────────┴─────────────┘
+                      │
+         ┌────────────▼────────────┐
+         │      BANCO DE DADOS      │
+         │   (Estado Persistente,    │
+         │    Histórico, Logs,      │
+         │    Economia, Memórias)   │
+         └───────────────────────────┘
+```
+
+### 8.2 Servidor Mundo (World Server)
 
 **Função**: Simula o planeta como sistema físico. Não conhece "jogador", "NPC" ou "inimigo". Conhece apenas entidades.
 
 **Responsabilidades**:
-- Física, colisões, balística, destruição de terreno, explosões
-- Mapa: terreno + modificações (crateras, túneis, estruturas)
-- Ecologia: flora e fauna não-hostil, cadeias alimentares, ciclos climáticos
-- Construção/Destruição: qualquer entidade modifica o mundo indiscriminadamente
+- **Física**: colisões, balística, destruição de terreno, explosões, trajetórias de projéteis
+- **Mapa**: terreno + modificações (crateras, túneis, estruturas construídas/destruídas)
+- **Ecologia**: flora, fauna não-hostil, cadeias alimentares, ciclos climáticos
+- **Clima**: tempestades de poeira, chuva ácida, noites de 72h, eventos meteorológicos
+- **Construção/Destruição**: qualquer entidade modifica o mundo indiscriminadamente
 
 **Filosofia**: *O mundo não se importa quem você é. Ele apenas reage.*
 
-### Servidor NPCs (Human Server)
+**Comunicação com Cliente**: O World Server emite snapshots de estado (entidades + terreno dentro do raio de simulação ativa) e eventos pontuais (explosão, tiro, morte). O cliente renderiza isso. O World Server **nunca recebe comandos de renderização**.
 
-**Função**: Simula toda a humanidade no planeta como agentes inteligentes com objetivos, medos, rotinas e relações.
+### 8.3 Servidor NPCs (Human Server)
+
+**Função**: Simula toda a humanidade no planeta como agentes inteligentes.
 
 **Responsabilidades**:
 - Soldados: patrulhas, táticas, moral, trauma, deserção
-- Mineradores/trabalhadores: rotinas de extração, transporte, reparos
-- Administradores/civis: distribuição de recursos, burocracia, pânico
-- Economia colonial: produção, consumo, filas, requisições
-- Reprints: reativação de clones, penalidades de memória
+- Mineradores/trabalhadores: rotinas de extração, transporte, reparos, greves
+- Administradores/civis: distribuição de recursos, burocracia, corrupção, pânico
+- Economia colonial: produção, consumo, comércio, inflação, filas, requisições
+- Facções: relações diplomáticas, guerras internas, alianças, traições
+- Reprints: reativação de clones, penalidades de memória, dívida
 - Chassis: rastreamento, reparos, falhas, "despertares"
+- Escravidão: monitoramento de indenturados, fuga, revoltas
+- Rotinas diárias: sono, fome, socialização, trabalho, lazer, medo
 
-**IA**: HTN + GOAP + sistemas emocionais. Cada NPC tem memória de curto e longo prazo.
+**IA**: HTN (Hierarchical Task Networks) + GOAP (Goal-Oriented Action Planning) + sistemas emocionais (medo, fadiga, lealdade, desespero, ambição). Cada NPC tem memória de curto prazo (últimas 24h) e longo prazo (eventos marcantes, relacionamentos, traumas).
 
-### Servidor Inimigos (Hive Server)
+### 8.4 Servidor Inimigos (Hive Server)
 
-**Função**: Simula os Mycelion como superorganismo. Não pensa em indivíduos. Pensa em função, território, ameaça, resposta.
+**Função**: Simula os Mycelion como superorganismo.
 
 **Responsabilidades**:
 - Castas com IA diferenciada por função biológica
 - Feromônios/sinais: marca no mundo, invisíveis aos humanos, legíveis aos Mycelion
 - Evolução adaptativa: ajustes de geração em tempo real
 - Ecologia nativa: ninhos, nutrição, ciclos de criação, conflitos inter-ninho
+- Resposta a invasão: coordenação de swarms, emboscadas, contra-ataques
 
 **Filosofia**: *Não há comando central. Há apenas o jardim, e a resposta imunológica.*
 
-### Protocolo de Comunicação
+### 8.5 Protocolo de Comunicação
 
-Todos os servidores se comunicam via bus de eventos. Mensagem universal:
+Todos os servidores se comunicam via bus de eventos.
 
+**Formato de Mensagem Universal**:
 ```json
 {
   "tick": 1847293,
   "origin": "world|npc|hive",
   "entity_id": "uuid",
-  "type": "move|fire|dig|damage|spawn|die|modify_terrain|emit_pheromone",
+  "type": "move|fire|dig|damage|spawn|die|modify_terrain|emit_pheromone|trade|speak|order",
   "payload": { ... }
 }
 ```
 
-O Servidor Mundo **não lê o campo `origin`**. Um jogador que atira é indistinguível de um NPC ou de um Mycelion. A física é igual para todos.
+**Princípio**: O Servidor Mundo **não lê o campo `origin`**. Um jogador que atira é indistinguível de um NPC ou de um Mycelion. A física é igual para todos.
+
+**Cliente → Gateway → Mundo**: O cliente envia apenas intenções de controle ("mover para direção X", "atirar em direção Y", "interagir com objeto Z"). O servidor de mundo decide se a ação é válida e aplica física. O cliente **nunca** decide posição final, dano, ou resultado.
 
 ---
 
-## 7. Temas e Experiência
+## 9. Temas e Experiência
 
-### O Jogo Pergunta
+### 9.1 O Jogo Pergunta
 
 - É possível deixar de ser "Another No One" em um sistema que te trata como recurso?
 - Se você é substituível, o que sobrevive de verdade?
 - Você pode ser lembrado por NPCs que não sabem que você já morreu uma vez?
 - Os Mycelion são o inimigo, ou são apenas fazendo o mesmo que a humanidade — colonizar?
+- O que significa "liberdade" em um mundo onde até a escolha de ser livre tem preço?
 
-### Arco Emocional
+### 9.2 Arco Emocional
 
 1. **Desembarque**: Você é um número em uma fila. Ninguém olha para você.
 2. **Terror**: Os Mycelion não são "monstros". São um sistema. E você está dentro dele.
 3. **Rotina**: A guerra normaliza. Você patrulha, extrai, repara, espera.
 4. **Conexão**: Alguns NPCs começam a reagir a você como indivíduo. Isso é reconfortante. Ou aterrorizante.
-5. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente.
-6. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído?
+5. **Comércio e Traição**: Você descobre que a colônia tem uma economia viva. E que a AES é apenas uma facção entre várias.
+6. **Crise**: Você morre. E volta. Ou não volta. Ou volta diferente. Ou volta endividado.
+7. **Escolha**: Persistir como número? Desertar? Tentar ser alguém? Ser destruído? Mudar o mundo?
 
 ---
 
-## 8. Referências Inspiracionais
+## 10. Referências Inspiracionais
 
 - Colonização sci-fi militar sombria
 - Simulação emergente profunda (mundos que vivem sem o jogador)
+- Economia viva, facções autônomas, escravidão e liberdade em sandbox
 - Arquitetura de servidor distribuído como metáfora narrativa
 - Biologia de superorganismos (formigas, fungos, corais)
 - Economia de guerra e corporações militares privadas
 - Questões de identidade em clones, backups, e máquinas conscientes
+- Separação de camada lógica e camada gráfica (arquitetura limpa)
