@@ -4,21 +4,7 @@
 
 **Another No One** é um jogo persistente de ação-tática sci-fi de mundo aberto 2D top-down com simulação emergente global, ambientado na colonização militar de um planeta remoto hostil. O jogador não é o escolhido. É um ativo descartável enviado para uma frente de guerra que devorou milhares antes dele.
 
-O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o estado do mundo é computado e avança. Jogadores conectam-se, agem dentro de um tick, desconectam-se, e o mundo continua sem eles. Quando retornam, o mundo pode estar irreconhecível.
-
-> *"You are not the chosen one. You are not even someone. But you can become anything — or cease to exist."*
-
-### Pilares de Design
-
-1. **Mundo Persistente e Autônomo**: O planeta avança em ticks independente de jogadores. Economia, facções, comércio, escravidão, guerras — tudo evolui sozinho, 24 horas por dia.
-2. **Substituibilidade**: Cada morte consome recursos. Morrer demais = fim da existência.
-3. **Arquitetura em Camadas**: O jogo roda em servidores especializados que não se conhecem.
-4. **Camada Gráfica Indiferente**: O servidor de mundo não sabe que existe gráfico. O render é apenas um cliente que consome estado. O visual pode ser totalmente alterado sem tocar na lógica.
-5. **Ticks Múltiplos**: Diferentes sistemas operam em frequências diferentes. Física a cada 10 segundos. Economia a cada 5 minutos. Eventos globais a cada 15 minutos. Ecologia a cada hora.
-6. **Ausência de Narrativa Linear**: Não existe "história principal". Existe apenas a guerra, a extração, e a sobrevivência.
-
----
-
+O mundo não é em tempo real. É em **ticks**. A cada intervalo predefinido, o estado do mundo é computado e avança. Jogadores conectam-se, agem dentro de um tick, desconectam-se, e o mundo continua sem eles. Quando retornam, o mundo pode estar irrec
 ## 2. O Mundo: V1C5A302-H
 
 ### Nomenclatura
@@ -609,6 +595,163 @@ Mas o jogador também interage com abstrações:
 **Another No One.**
 
 ---
+---
+
+## 13. Simulação Sob Demanda e Persistência Preguiçosa
+
+### O Problema
+
+Mesmo com cinco camadas de abstração, simular um planeta inteiro continuamente é desperdício. Milhares de entidades em regiões remotas nunca interagem com jogadores. Colônias abandonadas, ninhos Mycelion dormentes, naves interestelares em trânsito — tudo isso consome ciclos de CPU sem produzir valor.
+
+A solução é **não simular até que seja necessário**.
+
+### Simulação Sob Demanda (Lazy Simulation)
+
+O princípio é simples:
+
+> Uma entidade, região, ou sistema que não está sendo observado não existe em memória como estado contínuo. Quando alguém pergunta por ela, o sistema calcula o estado atual aplicando as regras do jogo ao último estado conhecido + tempo decorrido.
+
+O resultado é **indistinguível** de uma simulação contínua, mas custa uma fração do processamento.
+
+### Camadas de Persistência
+
+| Camada | Nome | O que persiste | Como é consultado |
+|--------|------|--------------|-------------------|
+| **P1** | **Ativo/Hot** | Estado completo em memória, tick por tick | Regiões com jogadores próximos, combate ativo, economia em crise |
+| **P2** | **Adormecido/Warm** | Snapshot a cada 10 minutos + log de eventos relevantes | Regiões que tiveram jogadores recentemente, facções em conflito |
+| **P3** | **Congelado/Cold** | Apenas estado-base + seed de simulação + timestamp do último cálculo | Regiões sem interação por horas, naves em trânsito, colônias estáveis |
+| **P4** | **Latente/Frozen** | Apenas parâmetros de geração procedural + histórico de eventos passados | Ruínas abandonadas, territórios não-reivindicados, espaço interestelar |
+
+### Como a Simulação Sob Demanda Funciona
+
+#### Exemplo 1: Colônia Estável a 200km
+
+**Cenário**: A colônia Beta-7 não tem jogadores há 8 horas. Está operando normalmente.
+
+**Sem simulação sob demanda**: O Servidor NPCs processa 200 NPCs a cada 10 segundos por 8 horas = 576.000 ciclos de IA para produzir... nada relevante.
+
+**Com simulação sob demanda**:
+1. Beta-7 está em P3 (Congelado). Último snapshot: 8 horas atrás.
+2. Um jogador se aproxima a 50km. O sistema recebe um sinal: "Beta-7 precisa ser consultada".
+3. Em vez de simular 8 horas de ticks, o sistema aplica uma **fórmula de resolução em batch**:
+   - Produção de cristais = (mineros_ativos * taxa_base * 8h) - (eventos_aleatorios_deterministicos)
+   - Suprimentos consumidos = (populacao * consumo_per_capita * 8h)
+   - Moral = moral_base - (fator_estresse * horas_sem_reforco)
+   - Eventos emergentes = `DeterministicRNG(seed, timestamp_inicial, timestamp_atual, regras_colonia)`
+4. O resultado é um novo snapshot: Beta-7 agora tem X cristais, Y suprimentos, Z moral, e 3 eventos ocorridos (um acidente de mina, um caso de contrabando, um soldado desertor).
+5. Beta-7 é promovida para P2 (Adormecido) ou P1 (Ativo), dependendo da distância do jogador.
+
+**A fórmula é determinística**. Dado o mesmo estado-base, seed, e intervalo de tempo, o resultado é sempre idêntico. Isso permite replay e debug.
+
+#### Exemplo 2: Nave Interestelar em Trânsito
+
+**Cenário**: Uma nave de suprimentos partiu de uma estação orbital há 3 dias. Chegaria em V1C5A302-H em 5 dias.
+
+**P4 (Latente)**: A nave não existe como entidade no Servidor Mundo. Existe apenas como:
+```json
+{
+  "id": "nav_4472",
+  "estado": "em_transito",
+  "origem": "Estacao_Orbital_Alpha",
+  "destino": "V1C5A302-H_PontoPouso_01",
+  "partida": 1699123456,
+  "chegada_prevista": 1699567890,
+  "carga": { "suprimentos": 5000, "municao": 2000, "combustivel": 10000 },
+  "seed": "a7f3d9e2"
+}
+```
+
+**Quando chega a hora**: O sistema simplesmente verifica `timestamp_atual >= chegada_prevista`. Se sim, a nave é materializada no Servidor Mundo como uma entidade em P1. Se algo aconteceu no meio do caminho (atraso, ataque de piratas, falha mecânica), isso foi determinado pela seed quando a nave foi gerada — não precisa ser simulado durante o trânsito.
+
+#### Exemplo 3: Ninho Mycelion Dormente
+
+**Cenário**: Um ninho Mycelion não foi perturbado em 2 semanas.
+
+**P3 (Congelado)**: O ninho existe apenas como:
+```json
+{
+  "id": "ninho_sector_G7",
+  "forca_aproximada": 450,
+  "castas": { "Broca": 200, "Escudo": 150, "Foice": 80, "Olho": 15, "Mente": 3, "Fazendeira": 1200 },
+  "expansao_acumulada": 0.3,
+  "ultima_perturbacao": 1698000000,
+  "seed": "mycelion_g7_seed"
+}
+```
+
+**Quando um jogador chega a 2km**: O sistema calcula:
+- Crescimento populacional = `formula_crescimento(castas, 2semanas, seed)`
+- Novos túneis escavados = `formula_expansao(expansao_acumulada, 2semanas, seed)`
+- Eventos internos (morte de Mente-Colmeia, conflito com outro ninho) = `DeterministicRNG(seed, regras_ninho)`
+- O ninho é "descongelado" em P1 com todas as entidades individuais posicionadas de forma consistente com o estado calculado.
+
+### Fórmulas de Resolução em Batch
+
+Cada tipo de sistema tem sua própria fórmula de resolução:
+
+| Sistema | Fórmula | Variáveis |
+|---------|---------|-----------|
+| **Produção de mina** | `miners * taxa_base * delta_t * (1 - fator_acidente(seed))` | Número de mineradores, taxa base do mineral, tempo decorrido, eventos aleatórios determinísticos |
+| **Consumo de suprimentos** | `populacao * consumo_per_capita * delta_t * fator_clima(seed)` | População, consumo por pessoa, tempo, variação climática |
+| **Moral de colônia** | `moral_base - (estresse * delta_t) + (eventos_positivos(seed) * delta_t)` | Moral inicial, fatores de estresse, eventos aleatórios |
+| **Crescimento Mycelion** | `populacao_atual * taxa_reproducao * delta_t * fator_limitante(seed)` | População, taxa biológica, recursos disponíveis |
+| **Movimento de naves** | `posicao = origem + (vetor * delta_t)` | Posição inicial, velocidade, tempo. Eventos pré-determinados pela seed. |
+| **Economia de mercado negro** | `oferta = producao_acumulada(seed); demanda = consumo_acumulado(seed); preco = f(oferta, demanda, volatilidade)` | Produção, consumo, tempo, volatilidade de mercado |
+
+### Determinismo e Seed
+
+Toda entidade em P3 ou P4 carrega uma **seed de simulação**. Essa seed é usada para gerar todos os eventos "aleatórios" que ocorreriam se a entidade tivesse sido simulada tick por tick.
+
+```
+seed = hash(entity_id + timestamp_congelamento + estado_base)
+```
+
+Isso garante:
+- **Reprodutibilidade**: o mesmo estado-base + tempo sempre gera o mesmo resultado
+- **Debug**: é possível "rebobinar" e ver exatamente o que aconteceu
+- **Anti-cheat**: o servidor pode verificar se o estado calculado está correto
+- **Economia de recursos**: nada é computado até ser necessário
+
+### Transição Entre Camadas de Persistência
+
+```
+P1 (Ativo) → P2 (Adormecido): 10 minutos sem interação de jogador
+P2 (Adormecido) → P3 (Congelado): 1 hora sem interação
+P3 (Congelado) → P4 (Latente): 24 horas sem interação + estado estável
+
+P4 (Latente) → P3 (Congelado): Consulta por jogador ou evento global
+P3 (Congelado) → P2 (Adormecido): Jogador a 50km
+P2 (Adormecido) → P1 (Ativo): Jogador a 2km ou evento de combate
+```
+
+A transição **para cima** (descongelamento) é sempre feita via simulação sob demanda.
+A transição **para baixo** (congelamento) é sempre feita salvando snapshot + seed.
+
+### O Banco de Dados e as Camadas
+
+| Camada | Onde vive | Formato |
+|--------|-----------|---------|
+| P1 (Ativo) | Memória RAM do servidor | Objetos de simulação completos |
+| P2 (Adormecido) | Memória RAM + Snapshot no banco a cada 10min | Snapshot JSON + log de eventos |
+| P3 (Congelado) | Apenas banco de dados | Estado-base compacto + seed + timestamp |
+| P4 (Latente) | Banco de dados ou até arquivos frios | Parâmetros de geração + histórico de eventos passados |
+
+### Vantagens
+
+- **Escalabilidade ilimitada**: O planeta pode ter 100 colônias, 50 ninhos Mycelion, 200 naves em trânsito, e 100.000 NPCs. Apenas os que estão próximos de jogadores existem em memória.
+- **Persistência verdadeira**: O mundo "existe" mesmo quando ninguém está jogando, mas sem custo computacional.
+- **Surpresa procedural**: Um jogador pode viajar para um setor remoto e descobrir que, durante as 72 horas em que ninguém foi lá, um ninho Mycelion cresceu 300%, uma colônia colapsou economicamente, ou uma nave de piratas aterrissou. Tudo isso é calculado no momento da chegada, mas é consistente com as regras do mundo.
+- **Debugging poderoso**: Como tudo é determinístico, é possível recriar o estado exato de qualquer ponto no tempo para investigar bugs.
+
+### Consequência Narrativa
+
+O jogador nunca sabe se uma colônia foi "simulada" ou "calculada". Para ele, o mundo sempre pareceu existir. A diferença é que, quando ele chega a um lugar abandonado, a história que encontra não foi escrita por um designer. Foi computada pelas regras do jogo.
+
+Uma mina pode ter fechado porque a fórmula de produção calculou que os suprimentos acabaram. Um soldado pode ter desertado porque a fórmula de moral calculou que ele passou do limite. Um ninho Mycelion pode ter invadido uma colônia porque a fórmula de expansão calculou que eles atingiram capacidade.
+
+**O mundo é um sistema de equações. O jogador é apenas uma variável que entra e sai.**
+
+---
 ## 10. Temas e Experiência
 
 ### 10.1 O Jogo Pergunta
@@ -644,4 +787,6 @@ Mas o jogador também interage com abstrações:
 - Questões de identidade em clones, backups, e máquinas conscientes
 - Separação de camada lógica e camada gráfica (arquitetura limpa)
 - Jogos persistentes com ticks onde o mundo avança independente do jogador
+
+
 
