@@ -6,7 +6,7 @@ import UserList from "./UserList.jsx";
 import DocPanel from "./DocPanel.jsx";
 import {
   Zap, Brain, Radio, Activity, Users, BookOpen,
-  LogOut
+  LogOut, Settings, AlertTriangle
 } from "lucide-react";
 
 const ROOM_META = {
@@ -28,19 +28,16 @@ const MIN_PANEL = 200;
 const MAX_PANEL = 600;
 const DEFAULT_PANEL = 340;
 
-export default function ChatRoom({ username, roomId, onLeave }) {
-  const { connected, messages, users, usersGlobal, thinking, thinkMode, sendMessage, think } =
-    useSocket(roomId, username);
+export default function ChatRoom({ token, username, roomId, onLeave, onOpenSettings, onLogout }) {
+  const { connected, messages, users, usersGlobal, thinking, thinkMode, authError, sendMessage, think } =
+    useSocket(roomId, username, token);
   const [panel, setPanel] = useState(null);
   const [pendingAttachment, setPendingAttachment] = useState(null);
-
-  // Resizable panel width
   const [panelWidth, setPanelWidth] = useState(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem("panel_width") : null;
     return saved ? parseInt(saved, 10) : DEFAULT_PANEL;
   });
   const [isDragging, setIsDragging] = useState(false);
-  const chatBodyRef = useRef(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(DEFAULT_PANEL);
 
@@ -60,7 +57,7 @@ export default function ChatRoom({ username, roomId, onLeave }) {
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
-    const delta = startXRef.current - e.clientX; // growing left
+    const delta = startXRef.current - e.clientX;
     const newW = Math.max(MIN_PANEL, Math.min(MAX_PANEL, startWidthRef.current + delta));
     setPanelWidth(newW);
   }, [isDragging]);
@@ -124,13 +121,23 @@ export default function ChatRoom({ username, roomId, onLeave }) {
           <button className={`btn-panel ${panel === "users" ? "panel-active" : ""}`} onClick={() => setPanel((p) => p === "users" ? null : "users")} title="Usuários">
             <Users size={16} />
           </button>
-          <button className="btn-leave" onClick={onLeave} title="Sair">
+          <button className="btn-panel" onClick={onOpenSettings} title="Configuracoes">
+            <Settings size={16} />
+          </button>
+          <button className="btn-leave" onClick={onLogout} title="Sair">
             <LogOut size={16} />
           </button>
         </div>
       </header>
 
-      <div className="chat-body" ref={chatBodyRef}>
+      {authError && (
+        <div className="auth-error-bar">
+          <AlertTriangle size={14} />
+          <span>{authError}</span>
+        </div>
+      )}
+
+      <div className="chat-body">
         <div className="chat-main">
           {thinking && (
             <div className="thinking-bar">
