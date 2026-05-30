@@ -13,7 +13,7 @@ export function useSocket(roomId, username, token) {
 
   useEffect(() => {
     if (!token) return;
-    const socket = io("http://localhost:3001", { auth: { token } });
+    const socket = io({ auth: { token } });
     socketRef.current = socket;
 
     socket.on("connect", () => {
