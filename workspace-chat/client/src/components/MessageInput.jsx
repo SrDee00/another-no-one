@@ -13,7 +13,7 @@ export default function MessageInput({ onSend, disabled, onThink }) {
     const form = new FormData();
     form.append("file", file);
     try {
-      const res = await fetch("http://localhost:3001/api/upload", { method: "POST", body: form });
+      const res = await fetch("/api/upload", { method: "POST", body: form });
       const data = await res.json();
       if (data.ok) setAttachment(data.attachment);
     } catch (e) {
