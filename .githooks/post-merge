@@ -1,0 +1,34 @@
+#!/bin/bash
+# .githooks/post-merge — Hook pós-merge automático
+# Ativar no servidor com: git config core.hooksPath .githooks
+# Executa npm install se package.json foi alterado no merge/pull
+
+SERVER_DIR="server"
+CLIENT_DIR="client"
+SERVICE="ano-workspace"
+
+# Verifica se package.json do server foi alterado
+if git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD | grep -q "^workspace-chat/server/package\.json"; then
+    echo "[post-merge] package.json do server alterado. Executando npm install..."
+    cd "$(git rev-parse --show-toplevel)/${SERVER_DIR}" || exit 1
+    npm install --production
+    echo "[post-merge] npm install concluído."
+fi
+
+# Verifica se package.json do client foi alterado
+if git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD | grep -q "^workspace-chat/client/package\.json"; then
+    echo "[post-merge] package.json do client alterado. Executando npm install + build..."
+    cd "$(git rev-parse --show-toplevel)/${CLIENT_DIR}" || exit 1
+    npm install --production
+    npm run build
+    echo "[post-merge] Build do client concluído."
+fi
+
+# Se houve alteração em qualquer package.json, reinicia o serviço
+if git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD | grep -q "package\.json"; then
+    if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
+        echo "[post-merge] Reiniciando $SERVICE..."
+        systemctl restart "$SERVICE"
+        echo "[post-merge] Serviço reiniciado."
+    fi
+fi
