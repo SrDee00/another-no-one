@@ -9,11 +9,43 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { readFileSync } from "fs";
+import { readFileSync, mkdirSync, existsSync } from "fs";
+import winston from "winston";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, ".env") });
+
+// === Structured Logging (Issue #1) ===
+const logsDir = join(__dirname, "logs");
+if (!existsSync(logsDir)) {
+  mkdirSync(logsDir, { recursive: true });
+}
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || "info",
+  format: winston.format.combine(
+    winston.format.timestamp({ format: "YYYY-MM-DDTHH:mm:ss.SSSZ" }),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(({ timestamp, level, message, ...meta }) => {
+          const metaStr = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+          return `${timestamp} [${level}]: ${message}${metaStr}`;
+        })
+      ),
+    }),
+    new winston.transports.File({
+      filename: join(logsDir, "app.log"),
+      maxsize: 10 * 1024 * 1024, // 10 MB
+      maxFiles: 5,
+    }),
+  ],
+});
 
 const app = express();
 app.use(cors());
@@ -74,7 +106,7 @@ for (const u of seedUsers) {
   if (!existing) {
     const hash = bcrypt.hashSync(u.password, SALT_ROUNDS);
     db.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)").run(u.username, hash);
-    console.log(`Usuario criado: ${u.username}`);
+    logger.info("Usuario criado", { username: u.username });
   }
 }
 
@@ -106,6 +138,19 @@ function verifyToken(token) {
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "https://api.ollama.com";
 const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY;
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL_DEEP || "kimi-k2.6";
+
+// Issue #3: Validate OLLAMA_API_KEY on startup
+if (!OLLAMA_API_KEY || OLLAMA_API_KEY.trim() === "") {
+  logger.error("OLLAMA_API_KEY ausente ou vazia. Configure a variavel de ambiente OLLAMA_API_KEY no arquivo .env");
+  process.exit(1);
+}
+logger.info("OLLAMA_API_KEY validada com sucesso");
+
+// Retry config (Issue #2)
+const OLLAMA_TIMEOUT_MS = 60000; // 60s
+const OLLAMA_MAX_RETRIES = 3;
+const OLLAMA_RETRY_BASE_DELAY_MS = 1000; // 1s initial, doubles each attempt
+const OLLAMA_RETRYABLE_STATUSES = [502, 503, 524];
 
 const SYSTEM_PROMPT = `Voce e um assistente de design de jogos para "Another No One", um jogo persistente de acao-tatica sci-fi com simulacao emergente global. Voce conhece todos os documentos de design. Seja direto, tecnico e pragmatico. Responda em portugues.`;
 
@@ -164,27 +209,101 @@ function buildMessages(history, mode, attachmentInfo) {
   return messages;
 }
 
+// Issue #2: askAI with timeout + retry + backoff + structured logging
 async function askAI(history, mode = "deep", attachmentInfo) {
   if (!OLLAMA_API_KEY) {
     return { content: "Erro: OLLAMA_API_KEY nao configurada.", model: "none" };
   }
   const model = mode === "quick" ? (process.env.OLLAMA_MODEL_QUICK || OLLAMA_MODEL) : mode === "summary" ? (process.env.OLLAMA_MODEL_SUMMARY || OLLAMA_MODEL) : OLLAMA_MODEL;
   const messages = buildMessages(history, mode, attachmentInfo);
-  try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OLLAMA_API_KEY}` },
-      body: JSON.stringify({ model, messages, stream: false }),
-    });
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${errText}`);
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= OLLAMA_MAX_RETRIES; attempt++) {
+    const startTime = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+
+    try {
+      logger.info("Ollama API call", { attempt, model, messagesCount: messages.length });
+
+      const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OLLAMA_API_KEY}` },
+        body: JSON.stringify({ model, messages, stream: false }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const latencyMs = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errText = await response.text();
+        const status = response.status;
+
+        // Log estruturado da falha Ollama (Issue #1)
+        logger.warn("Ollama API response error", {
+          attempt,
+          status,
+          latencyMs,
+          errorBody: errText.slice(0, 500),
+        });
+
+        // Issue #2: Retry on 502, 503, 524 only
+        if (OLLAMA_RETRYABLE_STATUSES.includes(status) && attempt < OLLAMA_MAX_RETRIES) {
+          const delay = OLLAMA_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          logger.warn("Ollama retry scheduled", { attempt, nextAttempt: attempt + 1, delayMs: delay, status });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          lastError = new Error(`HTTP ${status}: ${errText}`);
+          continue;
+        }
+
+        throw new Error(`HTTP ${status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      logger.info("Ollama API success", { attempt, model, latencyMs, status: response.status });
+      return { content: data.message?.content || "(sem resposta)", model };
+
+    } catch (e) {
+      clearTimeout(timeoutId);
+      const latencyMs = Date.now() - startTime;
+
+      // Check if this is a non-retryable HTTP error (4xx except 502/503/524) — break immediately
+      const isNonRetryable4xx = e.message && /^HTTP 4\d\d/.test(e.message) &&
+        !OLLAMA_RETRYABLE_STATUSES.some((s) => e.message.startsWith(`HTTP ${s}`));
+
+      if (isNonRetryable4xx) {
+        logger.error("Ollama API non-retryable error", { attempt, latencyMs, error: e.message });
+        lastError = e;
+        break;
+      }
+
+      if (e.name === "AbortError") {
+        logger.warn("Ollama API timeout", { attempt, latencyMs, timeoutMs: OLLAMA_TIMEOUT_MS });
+        lastError = new Error(`Timeout apos ${OLLAMA_TIMEOUT_MS / 1000}s`);
+      } else {
+        // Network errors or retryable HTTP errors — retry with backoff
+        if (attempt < OLLAMA_MAX_RETRIES) {
+          const delay = OLLAMA_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          logger.warn("Ollama error, scheduling retry", {
+            attempt,
+            nextAttempt: attempt + 1,
+            delayMs: delay,
+            error: e.message,
+            latencyMs,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          lastError = e;
+          continue;
+        }
+        logger.error("Ollama API final failure", { attempt, latencyMs, error: e.message });
+        lastError = e;
+      }
     }
-    const data = await response.json();
-    return { content: data.message?.content || "(sem resposta)", model };
-  } catch (e) {
-    return { content: `Erro na API Ollama Cloud: ${e.message}`, model: "error" };
   }
+
+  return { content: `Erro na API Ollama Cloud: ${lastError?.message || "falha desconhecida"}`, model: "error" };
 }
 
 // === HTTP Routes ===
@@ -349,12 +468,42 @@ io.on("connection", (socket) => {
   });
 });
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, users: onlineUsers.size }));
+// Issue #4: Enhanced health check with Ollama connectivity test
+app.get("/api/health", async (_req, res) => {
+  const health = {
+    ok: true,
+    users: onlineUsers.size,
+    ollama: { connected: false, latency_ms: null },
+  };
+
+  try {
+    const startTime = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      headers: { Authorization: `Bearer ${OLLAMA_API_KEY}` },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    health.ollama.latency_ms = Date.now() - startTime;
+    health.ollama.connected = response.ok;
+    if (!response.ok) {
+      health.ollama.error = `HTTP ${response.status}`;
+    }
+  } catch (e) {
+    health.ollama.connected = false;
+    health.ollama.error = e.name === "AbortError" ? "timeout (5s)" : e.message;
+  }
+
+  res.json(health);
+});
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Servidor ANO Workspace rodando em 127.0.0.1:${PORT}`);
-  console.log(`SQLite: ${join(__dirname, "chat.db")}`);
-  console.log(`Ollama Cloud: ${OLLAMA_BASE_URL}/api/chat`);
-  console.log(`Modelo: ${OLLAMA_MODEL}`);
+  logger.info(`Servidor ANO Workspace rodando em 127.0.0.1:${PORT}`);
+  logger.info(`SQLite: ${join(__dirname, "chat.db")}`);
+  logger.info(`Ollama Cloud: ${OLLAMA_BASE_URL}/api/chat`);
+  logger.info(`Modelo: ${OLLAMA_MODEL}`);
 });
