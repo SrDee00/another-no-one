@@ -3,8 +3,10 @@ import { X, User, Lock, Eye, EyeOff, Save, AlertCircle, CheckCircle } from "luci
 
 export default function SettingsModal({ token, username, onClose, onChanged }) {
   const [newUsername, setNewUsername] = useState(username);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
@@ -20,24 +22,28 @@ export default function SettingsModal({ token, username, onClose, onChanged }) {
       setError("O nome de usuario nao pode ficar vazio.");
       return;
     }
+    if (!currentPassword) {
+      setError("Informe a senha atual para confirmar as alteracoes.");
+      return;
+    }
     if (newPassword && newPassword !== confirmPassword) {
       setError("As senhas nao coincidem.");
       return;
     }
 
-    const payload = {};
+    const payload = { currentPassword };
     if (newUsername.trim() !== username) payload.newUsername = newUsername.trim();
     if (newPassword) payload.newPassword = newPassword;
 
-    if (Object.keys(payload).length === 0) {
+    if (!payload.newUsername && !payload.newPassword) {
       setError("Nenhuma alteracao foi feita.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3001/api/users/me", {
-        method: "PATCH",
+      const res = await fetch("/api/change-credentials", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -48,6 +54,7 @@ export default function SettingsModal({ token, username, onClose, onChanged }) {
       if (data.ok) {
         setSuccess("Dados atualizados com sucesso.");
         onChanged(data.token, data.username);
+        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
@@ -89,6 +96,21 @@ export default function SettingsModal({ token, username, onClose, onChanged }) {
               maxLength={24}
               autoFocus
             />
+          </div>
+
+          <div className="login-section">
+            <label><Lock size={12} /> Senha atual</label>
+            <div className="password-wrap">
+              <input
+                type={showCurrentPass ? "text" : "password"}
+                placeholder="Obrigatorio para confirmar"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+              <button type="button" className="toggle-pass" onClick={() => setShowCurrentPass(!showCurrentPass)} tabIndex={-1}>
+                {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           <div className="login-section">

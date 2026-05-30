@@ -1167,6 +1167,8 @@ html, body, #root {
 .panel-wrapper .chat-panel {
   width: 100%;
   border-left: none;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Mobile: hide resizer, panels are overlays */
